@@ -12,7 +12,7 @@ export interface IBreadcrumb {
 export type TOrigin = {
   endpoint: string | null;
   filePath: string | null;
-  timestamps: Date;
+  timestamps: string | Date;
   connectionUrl?: string;
   sessionId?: string | number;
 };
@@ -33,7 +33,7 @@ export class SDKResponse<T = TOrigin> {
   errorType?: string;
   origin: TOrigin;
   stack: any;
-  timestamps: string;
+  timestamps: string | Date;
   breadcrumbs: IBreadcrumb[] = [];
   constructor(
     event: string,

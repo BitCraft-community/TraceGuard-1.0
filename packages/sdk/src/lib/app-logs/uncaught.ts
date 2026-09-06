@@ -19,7 +19,11 @@ process?.on("uncaughtException", (error, origin) => {
       `caught exception : ${error}` + `origin : ${origin}`,
     );
 
-    let ORIGIN = { endpoint: "", filePath: null };
+    let ORIGIN = {
+      endpoint: "",
+      filePath: null,
+      timestamps: new Date().toISOString(),
+    };
 
     const successRes = new SDKResponse(error.name, ORIGIN, 200, error.stack);
 
