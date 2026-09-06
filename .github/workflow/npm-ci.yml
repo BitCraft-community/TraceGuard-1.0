@@ -1,9 +1,10 @@
 name: ci => deploy npm package
 
 on:
-pull_request:
-  push: branches
-    - feat/packages
+  pull_request:
+  push:
+    branches:
+      - feat/packages   
 
 concurrency:
    group: ${{ github.workflow }}-${{ github.ref }}
