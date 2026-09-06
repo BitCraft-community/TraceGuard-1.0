@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - feat/packages   
+      - feat/packages
 
 concurrency:
    group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,6 +24,8 @@ jobs:
 
     - name: Install dependencies
       run: npm install
+      working-directory: packages/sdk
 
     - name: Run CI
       run: npm run ci
+      working-directory: packages/sdk
