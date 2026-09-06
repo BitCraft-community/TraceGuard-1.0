@@ -1,9 +1,23 @@
-type TOrigin = {
+export type TBreadcrumbCategory =
+  "http" | "auth" | "validation" | "navigation" | "custom";
+
+export interface IBreadcrumb {
+  message: string;
+  category?: TBreadcrumbCategory;
+  level?: "info" | "warning" | "error";
+  data?: Record<string, any>;
+  timestamp: string;
+}
+
+export type TOrigin = {
   endpoint: string | null;
   filePath: string | null;
+  timestamps: Date;
+  connectionUrl?: string;
+  sessionId?: string | number;
 };
 
-interface SDKError {
+export interface SDKError {
   message: string;
   code?: string;
   raw?: any;
@@ -19,6 +33,8 @@ export class SDKResponse<T = TOrigin> {
   errorType?: string;
   origin: TOrigin;
   stack: any;
+  timestamps: string;
+  breadcrumbs: IBreadcrumb[] = [];
   constructor(
     event: string,
     origin: TOrigin, // Moved before optional arg
@@ -32,7 +48,36 @@ export class SDKResponse<T = TOrigin> {
     this.error = null;
     this.metadata = null;
     this.errorType = undefined;
-    this.stack = stack;
+    if (stack instanceof Error) {
+      this.stack = stack.stack || stack.message;
+    } else if (typeof stack === "string") {
+      this.stack = stack;
+    } else {
+      this.stack = stack ? String(stack) : null;
+    }
+    this.timestamps = new Date().toISOString();
+  }
+
+  /**
+   * Append a breadcrumb to record execution history leading to errors/success
+   * @reason :  breadcrumbs to find out the why we occurred this error
+   */
+  addBreadCrumb(
+    message: string,
+    options: {
+      category?: TBreadcrumbCategory;
+      level?: "info" | "warning" | "error";
+      data?: Record<string, any>;
+    } = {},
+  ): this {
+    this.breadcrumbs.push({
+      message,
+      category: options.category,
+      level: options.level,
+      data: options.data,
+      timestamp: new Date().toDateString(),
+    });
+    return this;
   }
 
   setSuccess(metadata: T, message?: string): this {
@@ -57,6 +102,12 @@ export class SDKResponse<T = TOrigin> {
     this.errorType = errorType;
     this.message = this.error.message;
     this.metadata = null;
+
+    this.addBreadCrumb(this?.error?.message, {
+      category: "custom",
+      level: "error",
+      data: { code: error.code, message, errorType },
+    });
     return this;
   }
 

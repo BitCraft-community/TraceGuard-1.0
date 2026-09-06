@@ -1,23 +1,24 @@
 import { logger } from "./utils/logger";
+import { SDKResponse, type TOrigin } from "../src/utils/response";
 
-type IInit = {
+export type IInit = {
   connection: string;
   id: string | number;
 };
 
-let state = {
-  isConnected: false,
-  connectionUrl: undefined as string | undefined,
-  id: undefined as string | number | undefined,
-};
-/**
- * @param connection string
- * @param id string | number
- * @description  above both params is an created by self hosted backend itself ,
- * we can use it connect sdk and expressjs backend
- * **/
+interface SDKState {
+  isConnected: boolean;
+  connectionUrl?: string;
+  id?: string | number;
+}
 
-export function init({ connection, id }: IInit) {
+const state: SDKState = {
+  isConnected: false,
+  connectionUrl: undefined,
+  id: undefined,
+};
+
+export async function init({ connection, id }: IInit): Promise<SDKState> {
   if (!connection || !id) {
     throw new Error("connection credentials for traceguard not passed");
   }
@@ -27,34 +28,66 @@ export function init({ connection, id }: IInit) {
   state.isConnected = false;
 
   logger.info({
-    msg: "connection data established",
-    id: id !== "" || undefined || null,
-    connection: connection !== "" || undefined || null,
+    msg: "connection data initialized",
+    hasId: Boolean(id),
+    hasConnection: Boolean(connection),
   });
 
-  fetch(connection, {
-    method: "HEAD",
-  })
-    .then((res) => {
-      logger.info({ msg: "status of connection", status: res.status });
-      state.isConnected = true;
-    })
-    .catch((err) => {
-      logger.error({
-        msg: "error while making connection to backend by sdk",
-        err,
-      });
-      // throwing error to catch by users catch block
-      throw err;
+  try {
+    const res = await fetch(connection, { method: "HEAD" });
+    if (!res.ok) {
+      throw new Error(`Connection probe returned status ${res.status}`);
+    }
+    state.isConnected = true;
+    logger.info({ msg: "status of connection", status: res.status });
+    return { ...state };
+  } catch (err) {
+    logger.error({
+      msg: "error while making connection to backend by sdk",
+      err,
     });
+    throw err;
+  }
 }
 
-/**
- * @description connecting to sdk with backend states
- * **/
-export function getConnection() {
-  if (state.isConnected === false) {
+export function getConnection(): SDKState {
+  if (!state.isConnected) {
     throw new Error("not ready to connect");
   }
   return { ...state };
+}
+
+export function resetState(): void {
+  state.isConnected = false;
+  state.connectionUrl = undefined;
+  state.id = undefined;
+}
+
+/**
+ * Factory linking the active connection to SDKResponse
+ */
+export function createResponse<T = TOrigin>(
+  event: string,
+  originData: Omit<TOrigin, "connectionUrl" | "sessionId">,
+  statusCode: number | null = null,
+  stack?: any,
+): SDKResponse<T> {
+  const currentConn = state.isConnected ? state : undefined;
+
+  const fullOrigin: TOrigin = {
+    ...originData,
+    connectionUrl: currentConn?.connectionUrl,
+    sessionId: currentConn?.id,
+  };
+
+  const response = new SDKResponse<T>(event, fullOrigin, statusCode, stack);
+
+  if (currentConn) {
+    response.addBreadCrumb("SDK Session Attached", {
+      category: "navigation",
+      data: { connectionUrl: currentConn.connectionUrl, id: currentConn.id },
+    });
+  }
+
+  return response;
 }
