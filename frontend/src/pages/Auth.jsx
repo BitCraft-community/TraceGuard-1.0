@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mail, Lock, User, ShieldCheck, KeyRound, ArrowRight, RefreshCw, ArrowLeft, Briefcase, AlertCircle } from 'lucide-react';
+import { authService } from '../services/authService';
 
 export default function Auth({ onLoginSuccess }) {
   const [isRegister, setIsRegister] = useState(false);
@@ -17,22 +18,6 @@ export default function Auth({ onLoginSuccess }) {
   const [errorMsg, setErrorMsg] = useState('');
   const inputRefs = useRef([]);
 
-  // Seed default demo user if localStorage is empty
-  useEffect(() => {
-    const existingUsers = localStorage.getItem('traceguard_users');
-    if (!existingUsers) {
-      const demoUsers = [
-        {
-          name: 'Alex Mercer',
-          email: 'developer@traceguard.com',
-          password: 'password123',
-          role: 'Developer'
-        }
-      ];
-      localStorage.setItem('traceguard_users', JSON.stringify(demoUsers));
-    }
-  }, []);
-
   // Timer countdown for OTP resend
   useEffect(() => {
     let interval;
@@ -48,8 +33,8 @@ export default function Auth({ onLoginSuccess }) {
     setErrorMsg('');
   };
 
-  // Step 1: Validate Credentials Against localStorage
-  const handleAuthSubmit = (e) => {
+  // Step 1: Submit Credentials to Backend
+  const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -58,13 +43,7 @@ export default function Auth({ onLoginSuccess }) {
       return;
     }
 
-    const registeredUsers = JSON.parse(localStorage.getItem('traceguard_users') || '[]');
-    const existingUser = registeredUsers.find(
-      (u) => u.email.toLowerCase() === formData.email.toLowerCase()
-    );
-
     if (isRegister) {
-      // REGISTRATION CHECKS
       if (!formData.name.trim()) {
         setErrorMsg('Please enter your full name.');
         return;
@@ -73,28 +52,34 @@ export default function Auth({ onLoginSuccess }) {
         setErrorMsg('Please specify your custom role.');
         return;
       }
-      if (existingUser) {
-        setErrorMsg('An account with this email already exists. Please Sign In.');
-        return;
-      }
-    } else {
-      // LOGIN CHECKS
-      if (!existingUser) {
-        setErrorMsg('No account found with this email. Please create an account first.');
-        return;
-      }
-      if (existingUser.password !== formData.password) {
-        setErrorMsg('Incorrect password. Please try again.');
-        return;
-      }
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const resolvedRole = formData.role === 'Other' ? (formData.customRole.trim() || 'Contributor') : formData.role;
+      
+      if (isRegister) {
+        await authService.register({
+          name: formData.name.trim(),
+          email: formData.email.toLowerCase(),
+          password: formData.password,
+          role: resolvedRole
+        });
+      } else {
+        await authService.login({
+          email: formData.email.toLowerCase(),
+          password: formData.password
+        });
+      }
+
+      // Move to OTP step upon successful backend response
       setStep('otp');
       setTimer(30);
-    }, 800);
+    } catch (err) {
+      setErrorMsg(err.message || 'Authentication failed. Please check your inputs.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // OTP Auto-Focus Navigation
@@ -115,51 +100,36 @@ export default function Auth({ onLoginSuccess }) {
     }
   };
 
-  // Step 2: Final Verification -> Save to Database & Log In
-  const handleVerifyOtp = (e) => {
+  // Step 2: Final Verification -> Verify OTP with Backend
+  const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    if (otp.join('').length < 6) return;
+    const otpCode = otp.join('');
+    if (otpCode.length < 6) return;
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setErrorMsg('');
 
-      const registeredUsers = JSON.parse(localStorage.getItem('traceguard_users') || '[]');
-      let userData;
+    try {
+      const response = await authService.verifyOtp({
+        email: formData.email.toLowerCase(),
+        otp: otpCode
+      });
 
-      if (isRegister) {
-        const resolvedRole = formData.role === 'Other' ? (formData.customRole.trim() || 'Contributor') : formData.role;
-        userData = {
-          name: formData.name.trim(),
-          email: formData.email.toLowerCase(),
-          password: formData.password,
-          role: resolvedRole
-        };
-
-        // Save new user into registered users array
-        const updatedUsers = [...registeredUsers, userData];
-        localStorage.setItem('traceguard_users', JSON.stringify(updatedUsers));
-      } else {
-        // Fetch existing registered user details
-        const foundUser = registeredUsers.find((u) => u.email.toLowerCase() === formData.email.toLowerCase());
-        userData = {
-          name: foundUser.name,
-          email: foundUser.email,
-          role: foundUser.role
-        };
-      }
-
-      // Save session user
+      // Construct session user data from response or fallback
       const sessionUser = {
-        name: userData.name,
-        email: userData.email,
-        role: userData.role,
-        token: 'mock-jwt-2fa-token'
+        name: response.user?.name || formData.name || 'TraceGuard User',
+        email: formData.email,
+        role: response.user?.role || formData.role,
+        token: response.token || 'mock-jwt-2fa-token'
       };
 
       localStorage.setItem('traceguard_active_user', JSON.stringify(sessionUser));
       onLoginSuccess(sessionUser);
-    }, 1000);
+    } catch (err) {
+      setErrorMsg(err.message || 'Invalid OTP code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
