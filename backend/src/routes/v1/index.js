@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const authRoutes = require("./authRoutes");
+const webhookRoutes = require("./webhookRoutes");
 
 router.get("/health", (req, res) => {
     res.json({
@@ -11,5 +12,6 @@ router.get("/health", (req, res) => {
 });
 
 router.use("/auth", authRoutes);
+router.use("/webhooks", webhookRoutes);
 
 module.exports = router;
