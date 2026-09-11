@@ -1,5 +1,5 @@
 import { logger } from "./utils/logger";
-import { SDKResponse, type TOrigin } from "../src/utils/response";
+import { SDKResponse, type TOrigin } from "./utils/response";
 
 export type IInit = {
   connection: string;

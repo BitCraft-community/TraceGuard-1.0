@@ -3,6 +3,8 @@ const express = require("express");
 const router = express.Router();
 const controller = require("../../controllers/telemetry.controller");
 
+
+
 // Health check for init()
 router.head("/verify", controller.verifyConnection);
 
